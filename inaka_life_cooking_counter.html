@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>日本の田舎暮らし｜料理数量カウンター</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN",
+                 "Yu Gothic", Meiryo, sans-serif;
+    background: #f4ead8;
+    color: #3f3328;
+  }
+  .wrap { max-width: 900px; margin: auto; padding: 20px 14px 40px; }
+  h1 { margin: 0 0 6px; font-size: 25px; }
+  .sub { color: #756453; margin-bottom: 16px; }
+  .summary {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(255,250,240,.96);
+    border: 2px solid #c99c5b; border-radius: 16px;
+    padding: 14px; margin-bottom: 16px;
+    box-shadow: 0 4px 14px rgba(70,45,20,.12);
+  }
+  .summary-row { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .count { font-size: 24px; font-weight: 800; }
+  .progress {
+    height: 12px; background:#e2d1b5; border-radius:99px;
+    overflow:hidden; margin-top:10px;
+  }
+  .bar { height:100%; width:0%; background:#d49a3a; transition:.2s; }
+  .actions { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  button {
+    border:0; border-radius:10px; padding:9px 13px; cursor:pointer;
+    font-weight:700; font-size:14px;
+  }
+  .reset { background:#6d5a47; color:white; }
+  .zero { background:#e8ddd0; color:#4c3d30; }
+  .category {
+    margin: 18px 0 10px; font-size:18px; font-weight:800;
+    border-left: 6px solid #d49a3a; padding-left:10px;
+  }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(270px,1fr)); gap:10px; }
+  .item {
+    background:#fffaf1; border:1px solid #dfc9a8; border-radius:14px;
+    padding:11px 12px; display:flex; align-items:center; gap:10px;
+  }
+  .name { flex:1; font-size:15px; font-weight:700; line-height:1.35; }
+  .num { min-width:42px; text-align:center; font-size:18px; font-weight:800; }
+  .minus, .plus {
+    width:38px; height:38px; padding:0; border-radius:10px;
+    font-size:22px; line-height:38px;
+  }
+  .minus { background:#eadfd2; color:#665445; }
+  .plus { background:#d49a3a; color:white; }
+  .done { background:#edf3dc; border-color:#a7bb72; }
+  .done .name { color:#536b2b; }
+  @media(max-width:480px) {
+    .wrap { padding:14px 9px 30px; }
+    h1 { font-size:21px; }
+    .grid { grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🍳 日本の田舎暮らし｜料理数量カウンター</h1>
+  <div class="sub">画像に写っていた料理51種類を登録。作った・集めた数量をカウントできます。</div>
+
+  <div class="summary">
+    <div class="summary-row">
+      <div class="count"><span id="total">0</span> / 51 種類</div>
+      <div id="percent">0%</div>
+    </div>
+    <div class="progress"><div class="bar" id="bar"></div></div>
+    <div class="actions">
+      <button class="zero" onclick="zeroAll()">数量を0にする</button>
+      <button class="reset" onclick="resetAll()">データをリセット</button>
+    </div>
+  </div>
+
+  <div id="app"></div>
+</div>
+
+<script>
+const data = [
+  ["果物・飲み物など", [
+    "カットした柿","みかん","干し柿","緑茶"
+  ]],
+  ["ごはん・汁物・麺・餅など", [
+    "お味噌汁","お雑煮","うどん","お蕎麦(そば)","おにぎり",
+    "梅干しごはん","漬物ごはん","納豆ごはん","卵かけごはん",
+    "七草がゆ","栗ごはん","焼き餅","ひし餅","かしわ餅",
+    "おはぎ・ぼた餅","お団子","卵焼き","焼き芋","煎り大豆",
+    "焼き松茸"
+  ]],
+  ["季節の料理・弁当・氷", [
+    "かき氷","花見弁当","時期が過ぎた花見弁当"
+  ]],
+  ["魚料理", [
+    "イトウの刺身","焼き鮭","鮎の塩焼き","アブラハヤの素焼き",
+    "アマゴの素焼き","エゾイワナの素焼き","イワナの素焼き",
+    "ウグイの素焼き","オイカワの素焼き","オヤニラミの塩焼き",
+    "オオタナゴの素焼き","オショロコマの塩焼き","カジカの素焼き",
+    "カマツカの素焼き","カワムツの素焼き","ゼゼラの素焼き",
+    "ニジマスの塩焼き","ハスの素焼き","ハゼの素焼き",
+    "ヒガイの塩焼き","ヒメマスの素焼き","ヘラブナの素焼き",
+    "ヤマメの素焼き","ワカサギの素焼き"
+  ]]
+];
+
+const items = data.flatMap(([_, arr]) => arr);
+const key = "inaka-life-cooking-counter-v1";
+let counts = JSON.parse(localStorage.getItem(key) || "{}");
+
+function save(){ localStorage.setItem(key, JSON.stringify(counts)); }
+
+function render(){
+  const app = document.getElementById("app");
+  app.innerHTML = "";
+  data.forEach(([category, arr]) => {
+    const h = document.createElement("div");
+    h.className = "category";
+    h.textContent = category;
+    app.appendChild(h);
+
+    const grid = document.createElement("div");
+    grid.className = "grid";
+    arr.forEach(name => {
+      const n = Number(counts[name] || 0);
+      const item = document.createElement("div");
+      item.className = "item" + (n > 0 ? " done" : "");
+      item.innerHTML = `
+        <div class="name">${name}</div>
+        <button class="minus" aria-label="${name}を1減らす">−</button>
+        <div class="num">${n}</div>
+        <button class="plus" aria-label="${name}を1増やす">＋</button>
+      `;
+      item.querySelector(".minus").onclick = () => change(name, -1);
+      item.querySelector(".plus").onclick = () => change(name, 1);
+      grid.appendChild(item);
+    });
+    app.appendChild(grid);
+  });
+  updateSummary();
+}
+
+function change(name, delta){
+  counts[name] = Math.max(0, Number(counts[name] || 0) + delta);
+  save(); render();
+}
+
+function updateSummary(){
+  const completed = items.filter(x => Number(counts[x] || 0) > 0).length;
+  const pct = Math.round(completed / items.length * 100);
+  document.getElementById("total").textContent = completed;
+  document.getElementById("percent").textContent = pct + "%";
+  document.getElementById("bar").style.width = pct + "%";
+}
+
+function zeroAll(){
+  if(!confirm("すべての数量を0にしますか？")) return;
+  counts = {};
+  save(); render();
+}
+function resetAll(){
+  if(!confirm("カウンターの保存データを完全にリセットしますか？")) return;
+  localStorage.removeItem(key);
+  counts = {};
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
